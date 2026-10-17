@@ -78,14 +78,15 @@ public class Player {
     private ContentFrameLayout parentLayout;
     private boolean serviceBound;
     private boolean closed;
+    private PlaybackService playbackService;
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, android.os.IBinder binder) {
             if (closed) {
                 return;
             }
-            PlaybackService service = ((PlaybackService.LocalBinder) binder).getService();
-            exoPlayer = service.getPlayer();
+            playbackService = ((PlaybackService.LocalBinder) binder).getService();
+            exoPlayer = playbackService.getPlayer();
             exoPlayer.addListener(playerEventListener);
             preparePlayer(config.getUri());
             if (config.useInlineView()) {
@@ -95,6 +96,7 @@ public class Player {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            playbackService = null;
             exoPlayer = null;
             if (!closed) {
                 sendError("Playback service disconnected");
@@ -473,6 +475,9 @@ public class Player {
     public void close() {
         Log.i(TAG, "closing stream");
         closed = true;
+        if (playbackService != null) {
+            playbackService.cancelSleepTimer();
+        }
         if (!config.isAudioOnly()) {
             audioManager.abandonAudioFocus(audioFocusChangeListener);
         }
@@ -523,6 +528,17 @@ public class Player {
         if (serviceBound) {
             activity.unbindService(serviceConnection);
             serviceBound = false;
+        }
+        playbackService = null;
+    }
+
+    public boolean setSleepTimer(long delayMs, long fadeMs) {
+        return playbackService != null && playbackService.setSleepTimer(delayMs, fadeMs);
+    }
+
+    public void clearSleepTimer() {
+        if (playbackService != null) {
+            playbackService.cancelSleepTimer();
         }
     }
 

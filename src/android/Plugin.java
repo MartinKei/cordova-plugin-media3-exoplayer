@@ -175,6 +175,31 @@ public class Plugin extends CordovaPlugin {
                 });
                 return true;
             }
+            else if (action.equals("setSleepTimer")) {
+                final long delayMs = data.optLong(0, -1);
+                final long fadeMs = data.optLong(1, -1);
+                cordova.getActivity().runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (self.player != null && self.player.setSleepTimer(delayMs, fadeMs)) {
+                            callbackContext.success();
+                        } else {
+                            callbackContext.error("No active radio stream or invalid sleep deadline");
+                        }
+                    }
+                });
+                return true;
+            }
+            else if (action.equals("clearSleepTimer")) {
+                cordova.getActivity().runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (self.player != null) {
+                            self.player.clearSleepTimer();
+                        }
+                        callbackContext.success();
+                    }
+                });
+                return true;
+            }
             else if (action.equals("setVolume")) {
                 if (self.player == null) {
                     return false;

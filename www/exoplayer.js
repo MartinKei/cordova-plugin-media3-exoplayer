@@ -56,6 +56,12 @@ module.exports = {
     setVolume: function (volume, successCallback, errorCallback) {
         cordova.exec(successCallback, errorCallback, "ExoPlayer", "setVolume", [volume]);
     },
+    setSleepTimer: function (delayMs, fadeMs, successCallback, errorCallback) {
+        cordova.exec(successCallback, errorCallback, "ExoPlayer", "setSleepTimer", [delayMs, fadeMs]);
+    },
+    clearSleepTimer: function (successCallback, errorCallback) {
+        cordova.exec(successCallback, errorCallback, "ExoPlayer", "clearSleepTimer", []);
+    },
     close: function (successCallback, errorCallback) {
         cordova.exec(successCallback, errorCallback, "ExoPlayer", "close", []);
     },
