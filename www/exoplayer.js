@@ -53,6 +53,9 @@ module.exports = {
     setController: function (controller, successCallback, errorCallback) {
         cordova.exec(successCallback, errorCallback, "ExoPlayer", "setController", [controller]);
     },
+    setVolume: function (volume, successCallback, errorCallback) {
+        cordova.exec(successCallback, errorCallback, "ExoPlayer", "setVolume", [volume]);
+    },
     close: function (successCallback, errorCallback) {
         cordova.exec(successCallback, errorCallback, "ExoPlayer", "close", []);
     },

@@ -466,6 +466,14 @@ public class Player {
         exoPlayer.setPlayWhenReady(true);
     }
 
+    public void setVolume(float volume) {
+        // Player gain only. Do not change the device volume.
+        float clamped = Math.max(0.0f, Math.min(1.0f, volume));
+        if (null != exoPlayer) {
+            exoPlayer.setVolume(clamped);
+        }
+    }
+
     public void stop() {
         Log.i(TAG, "STOP" +  ( (null == exoPlayer) ? " exoPlayer not yet initialized" : ""));
 
