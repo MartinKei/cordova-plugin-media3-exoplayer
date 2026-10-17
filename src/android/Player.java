@@ -76,6 +76,31 @@ public class Player {
     private boolean paused = false;
     private AudioManager audioManager;
     private ContentFrameLayout parentLayout;
+    private boolean serviceBound;
+    private boolean closed;
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, android.os.IBinder binder) {
+            if (closed) {
+                return;
+            }
+            PlaybackService service = ((PlaybackService.LocalBinder) binder).getService();
+            exoPlayer = service.getPlayer();
+            exoPlayer.addListener(playerEventListener);
+            preparePlayer(config.getUri());
+            if (config.useInlineView()) {
+                setController(config.getController());
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            exoPlayer = null;
+            if (!closed) {
+                sendError("Playback service disconnected");
+            }
+        }
+    };
 
     public Player(Configuration config, Activity activity, CallbackContext callbackContext, CordovaWebView webView) {
         this.config = config;
@@ -101,6 +126,12 @@ public class Player {
         public void onPlayerError(@NonNull PlaybackException error) {
             JSONObject payload = Payload.playerErrorEvent(Player.this.exoPlayer, error, null);
             new CallbackResponse(Player.this.callbackContext).send(PluginResult.Status.ERROR, payload, true);
+        }
+
+        @Override
+        public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+            JSONObject payload = Payload.playWhenReadyEvent(Player.this.exoPlayer);
+            new CallbackResponse(Player.this.callbackContext).send(PluginResult.Status.OK, payload, true);
         }
 
         @Override
@@ -217,12 +248,30 @@ public class Player {
         if (config.useInlineView()) {
             // Using a dialog doesn't work for us, as controls are drawn in HTML view (cordova ui)
             createPlayerInCordovaUI();
-
         } else if (!config.isAudioOnly()) {
             createDialog();
         }
-        preparePlayer(config.getUri());
 
+        if (config.isAudioOnly()) {
+            Intent intent = new Intent(activity, PlaybackService.class);
+            try {
+                // Start while the activity is visible. MediaSessionService enters the
+                // foreground when playback begins and keeps its own notification.
+                activity.startService(intent);
+                intent.setAction(PlaybackService.LOCAL_BIND_ACTION);
+                serviceBound = activity.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+                if (!serviceBound) {
+                    activity.stopService(intent);
+                    sendError("Could not bind the playback service");
+                }
+            } catch (Exception e) {
+                activity.stopService(intent);
+                sendError("Could not start the playback service: " + e.getMessage());
+            }
+            return;
+        }
+
+        preparePlayer(config.getUri());
         if (config.useInlineView()) {
             setController(config.getController());
         }
@@ -296,15 +345,21 @@ public class Player {
     }
 
     private void preparePlayer(Uri uri) {
-        int audioFocusResult = setupAudio();
-        String audioFocusString = audioFocusResult == AudioManager.AUDIOFOCUS_REQUEST_FAILED ?
-                "AUDIOFOCUS_REQUEST_FAILED" :
-                "AUDIOFOCUS_REQUEST_GRANTED";
+        String audioFocusString;
+        if (config.isAudioOnly()) {
+            audioFocusString = "MEDIA3_MANAGED";
+        } else {
+            int audioFocusResult = setupAudio();
+            audioFocusString = audioFocusResult == AudioManager.AUDIOFOCUS_REQUEST_FAILED ?
+                    "AUDIOFOCUS_REQUEST_FAILED" : "AUDIOFOCUS_REQUEST_GRANTED";
+        }
         DefaultBandwidthMeter bandwidthMeter = new DefaultBandwidthMeter.Builder(this.activity).build();
         //TrackSelection.Factory videoTrackSelectionFactory = new AdaptiveVideoTrackSelection.Factory(bandwidthMeter);
 
-        exoPlayer = new ExoPlayer.Builder(this.activity).build();
-        exoPlayer.addListener(playerEventListener);
+        if (!config.isAudioOnly()) {
+            exoPlayer = new ExoPlayer.Builder(this.activity).build();
+            exoPlayer.addListener(playerEventListener);
+        }
         if (null != exoView) {
             exoView.setPlayer(new ForwardingPlayer(exoPlayer) {
                 @Override
@@ -417,25 +472,63 @@ public class Player {
 
     public void close() {
         Log.i(TAG, "closing stream");
-        audioManager.abandonAudioFocus(audioFocusChangeListener);
+        closed = true;
+        if (!config.isAudioOnly()) {
+            audioManager.abandonAudioFocus(audioFocusChangeListener);
+        }
         if (exoPlayer != null) {
             exoPlayer.setPlayWhenReady(false);
             exoPlayer.stop();
-            exoPlayer.release();
+            exoPlayer.removeListener(playerEventListener);
+            if (config.isAudioOnly()) {
+                exoPlayer.clearMediaItems();
+            } else {
+                exoPlayer.release();
+            }
             exoPlayer = null;
+        }
+        detachView();
+        if (config.isAudioOnly()) {
+            activity.stopService(new Intent(activity, PlaybackService.class));
+        }
+    }
+
+    // Leave active audio with the service if the activity is removed.
+    public void detach() {
+        closed = true;
+        if (!config.isAudioOnly()) {
+            audioManager.abandonAudioFocus(audioFocusChangeListener);
+        }
+        if (exoPlayer != null) {
+            exoPlayer.removeListener(playerEventListener);
+            if (!config.isAudioOnly()) {
+                exoPlayer.release();
+            }
+            exoPlayer = null;
+        }
+        detachView();
+    }
+
+    private void detachView() {
+        if (exoView != null) {
+            exoView.setPlayer(null);
         }
         if (this.dialog != null) {
             dialog.dismiss();
+            dialog = null;
         }
-
         if (parentLayout != null && exoView != null) {
             parentLayout.removeView(exoView);
+        }
+        if (serviceBound) {
+            activity.unbindService(serviceConnection);
+            serviceBound = false;
         }
     }
 
     public void setStream(Uri uri, JSONObject controller) {
         if (null != uri && null != exoPlayer) {
-            DefaultBandwidthMeter bandwidthMeter = new DefaultBandwidthMeter.Builder(null).build();
+            DefaultBandwidthMeter bandwidthMeter = new DefaultBandwidthMeter.Builder(activity).build();
             MediaSource mediaSource = getMediaSource(uri, bandwidthMeter);
             exoPlayer.setMediaSource(mediaSource);
             exoPlayer.prepare();
@@ -462,8 +555,10 @@ public class Player {
     }
 
     private void play() {
-        paused = false;
-        exoPlayer.setPlayWhenReady(true);
+        if (exoPlayer != null) {
+            paused = false;
+            exoPlayer.setPlayWhenReady(true);
+        }
     }
 
     public void setVolume(float volume) {
@@ -475,10 +570,14 @@ public class Player {
     }
 
     public void stop() {
-        Log.i(TAG, "STOP" +  ( (null == exoPlayer) ? " exoPlayer not yet initialized" : ""));
-
+        Log.i(TAG, "STOP" + (null == exoPlayer ? " exoPlayer not yet initialized" : ""));
         paused = false;
-        exoPlayer.stop();
+        if (config.isAudioOnly()) {
+            // An idle foreground service must not keep its notification.
+            close();
+        } else if (exoPlayer != null) {
+            exoPlayer.stop();
+        }
     }
 
     private long normalizeOffset(long newTime) {

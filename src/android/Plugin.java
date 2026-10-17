@@ -33,6 +33,15 @@ public class Plugin extends CordovaPlugin {
     private Player player;
 
     @Override
+    public void onDestroy() {
+        if (player != null) {
+            player.detach();
+            player = null;
+        }
+        super.onDestroy();
+    }
+
+    @Override
     public boolean execute(final String action, final JSONArray data, final CallbackContext callbackContext) throws JSONException {
         try {
             final Plugin self = this;

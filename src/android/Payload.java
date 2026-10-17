@@ -68,6 +68,13 @@ public class Payload {
         return new JSONObject(map);
     }
 
+    public static JSONObject playWhenReadyEvent(ExoPlayer player) {
+        Map<String, String> map = new HashMap<String, String>();
+        map.put("eventType", "PLAY_WHEN_READY_EVENT");
+        addPlayerState(map, player);
+        return new JSONObject(map);
+    }
+
     public static JSONObject stopEvent(ExoPlayer player) {
         Map<String, String> map = new HashMap<String, String>();
         map.put("eventType", "STOP_EVENT");

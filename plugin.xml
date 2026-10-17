@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
+        xmlns:android="http://schemas.android.com/apk/res/android"
         id="cordova-plugin-media3-exoplayer"
         version="3.0.0">
 
@@ -22,6 +23,7 @@
         <framework src="androidx.media3:media3-exoplayer:1.8.0"/>
         <framework src="androidx.media3:media3-exoplayer-dash:1.8.0"/>
         <framework src="androidx.media3:media3-ui:1.8.0"/>
+        <framework src="androidx.media3:media3-session:1.8.0"/>
         <framework src="androidx.media3:media3-exoplayer-hls:1.8.0"/>
         <framework src="androidx.media3:media3-exoplayer-smoothstreaming:1.8.0"/>
         <framework src="androidx.media3:media3-exoplayer-rtsp:1.8.0"/>
@@ -29,6 +31,20 @@
         <framework src="androidx.media3:media3-exoplayer-ima:1.8.0"/>
 
         <framework src="com.squareup.picasso:picasso:2.5.2"/>
+
+        <config-file target="AndroidManifest.xml" parent="/manifest">
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+        </config-file>
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <service android:name="co.frontyard.cordova.plugin.exoplayer.PlaybackService"
+                     android:exported="false"
+                     android:foregroundServiceType="mediaPlayback">
+                <intent-filter>
+                    <action android:name="androidx.media3.session.MediaSessionService"/>
+                </intent-filter>
+            </service>
+        </config-file>
 
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="ExoPlayer">
@@ -56,6 +72,7 @@
         <source-file src="src/android/LayoutProvider.java" target-dir="src/co/frontyard/cordova/plugin/exoplayer/"/>
         <source-file src="src/android/Payload.java" target-dir="src/co/frontyard/cordova/plugin/exoplayer/"/>
         <source-file src="src/android/Player.java" target-dir="src/co/frontyard/cordova/plugin/exoplayer/"/>
+        <source-file src="src/android/PlaybackService.java" target-dir="src/co/frontyard/cordova/plugin/exoplayer/"/>
         <source-file src="src/android/Plugin.java" target-dir="src/co/frontyard/cordova/plugin/exoplayer/"/>
     </platform>
 </plugin>
